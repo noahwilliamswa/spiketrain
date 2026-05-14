@@ -1683,18 +1683,14 @@ function GoalsView({
     const value = completion(goal.id);
     const archived = goal.status === "Archived";
     const treeWidth = getGoalTreeWidth(goal, depth);
-    const isRoot = depth === 0;
 
     return (
       <div
         key={goal.id}
-        className={cx(
-          "flex flex-col gap-2",
-          isRoot ? "flex-1" : "shrink-0"
-        )}
+        className="flex flex-col gap-2"
         style={{
+          flex: "1 1 0",
           minWidth: `${treeWidth}px`,
-          width: isRoot ? "auto" : `${treeWidth}px`,
         }}
       >
         <button
@@ -1721,7 +1717,7 @@ function GoalsView({
           }}
           onClick={() => setSelectedGoalId(goal.id)}
           className={cx(
-            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
+            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing",
             archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
             depth === 0 && "min-h-[145px]",
             selectedGoalId === goal.id && "ring-1 ring-emerald-300"
@@ -1756,7 +1752,12 @@ function GoalsView({
         </button>
 
         {children.length > 0 && (
-          <div className="flex gap-2 items-start justify-center shrink-0 w-full">
+          <div
+            className="flex items-start w-full"
+            style={{
+              gap: `${GOAL_GAP}px`,
+            }}
+          >
             {children.map((child) => renderGoal(child, depth + 1))}
           </div>
         )}
@@ -1779,8 +1780,8 @@ function GoalsView({
         <h1 className="text-base">Workspace Goals</h1>
 
         <div className="text-xs text-zinc-500">
-          Top-level goals fill available space, then overflow horizontally when
-          their minimum widths require it.
+          Top-level goals fill available space. Child goals split the full parent
+          width equally while preserving minimum tree widths.
         </div>
       </div>
 
@@ -1818,8 +1819,9 @@ function GoalsView({
         }}
       >
         <div
-          className="flex gap-2 items-start min-h-full w-full"
+          className="flex items-start min-h-full w-full"
           style={{
+            gap: `${GOAL_GAP}px`,
             minWidth: `${totalRootWidth}px`,
           }}
         >
