@@ -1677,69 +1677,91 @@ function GoalsView({
 
     return Math.max(GOAL_MIN_WIDTH, childrenWidth);
   };
-
-  const renderGoal = (goal, depth = 0) => {
-    const children = goals.filter((g) => g.parentId === goal.id);
-    const value = completion(goal.id);
-    const archived = goal.status === "Archived";
-    const treeWidth = getGoalTreeWidth(goal, depth);
-    const isRoot = depth === 0;
-
-    return (
-      <div
-        key={goal.id}
-        className={cx(
-          "flex flex-col gap-2",
-          isRoot ? "flex-1" : "shrink-0"
-        )}
-        style={{
-          minWidth: `${treeWidth}px`,
-          width: isRoot ? "auto" : `${treeWidth}px`,
-        }}
-      >
-        <button
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            e.dataTransfer.setData(
-              "text/plain",
-              JSON.stringify({ type: "goal", id: goal.id })
-            );
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            try {
-              const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-
-              if (data.type === "goal") {
-                onSetGoalParent(data.id, goal.id);
-              }
-            } catch {}
-          }}
-          onClick={() => setSelectedGoalId(goal.id)}
+    const renderGoal = (goal, depth = 0) => {
+      const children = goals.filter((g) => g.parentId === goal.id);
+      const value = completion(goal.id);
+      const archived = goal.status === "Archived";
+      const treeWidth = getGoalTreeWidth(goal, depth);
+      const isRoot = depth === 0;
+    
+      return (
+        <div
+          key={goal.id}
           className={cx(
-            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
-            archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
-            depth === 0 && "min-h-[145px]",
-            selectedGoalId === goal.id && "ring-1 ring-emerald-300"
+            "flex flex-col gap-2",
+            isRoot ? "flex-1" : "shrink-0"
           )}
           style={{
-            width: "100%",
-            minWidth: `${GOAL_MIN_WIDTH}px`,
+            minWidth: `${treeWidth}px`,
+            width: isRoot ? "auto" : `${treeWidth}px`,
           }}
         >
-          <div
+          <button
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify({ type: "goal", id: goal.id })
+              );
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+    
+              try {
+                const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+    
+                if (data.type === "goal") {
+                  onSetGoalParent(data.id, goal.id);
+                }
+              } catch {}
+            }}
+            onClick={() => setSelectedGoalId(goal.id)}
             className={cx(
-              "absolute bottom-0 left-0 right-0",
-              archived ? "bg-zinc-600" : "bg-emerald-600"
+              "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
+              archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
+              depth === 0 && "min-h-[145px]",
+              selectedGoalId === goal.id && "ring-1 ring-emerald-300"
             )}
             style={{
-              height: `${Math.max(10, value)}%`,
+              width: "100%",
+              minWidth: `${GOAL_MIN_WIDTH}px`,
             }}
-          />
+          >
+            <div
+              className={cx(
+                "absolute bottom-0 left-0 right-0",
+                archived ? "bg-zinc-600" : "bg-emerald-600"
+              )}
+              style={{
+                height: `${Math.max(10, value)}%`,
+              }}
+            />
+    
+            <div className="absolute top-2 left-2 text-[10px] text-emerald-100/70">
+              {archived
+                ? "archived"
+                : depth === 0
+                  ? "top goal"
+                  : `child level ${depth}`}
+            </div>
+    
+            <div className="relative z-10 w-full p-3 flex items-end justify-between gap-2">
+              <div className="font-medium leading-4">{goal.title}</div>
+              <div className="font-bold">{value}%</div>
+            </div>
+          </button>
+    
+          {children.length > 0 && (
+            <div className="flex gap-2 items-start justify-center shrink-0 w-full">
+              {children.map((child) => renderGoal(child, depth + 1))}
+            </div>
+          )}
+        </div>
+      );
+    };
 
           <div className="absolute top-2 left-2 text-[10px] text-emerald-100/70">
             {archived
