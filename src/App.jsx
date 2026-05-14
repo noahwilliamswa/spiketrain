@@ -1717,10 +1717,10 @@ function GoalsView({
             depth === 0 && "min-h-[145px]",
             selectedGoalId === goal.id && "ring-1 ring-emerald-300"
           )}
-          style={{
-            width: `${GOAL_MIN_WIDTH}px`,
-            minWidth: `${GOAL_MIN_WIDTH}px`,
-            alignSelf: "center",
+            style={{
+              width: "100%",
+              minWidth: `${GOAL_MIN_WIDTH}px`,
+            }}
           }}
         >
           <div
