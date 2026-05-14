@@ -1691,38 +1691,36 @@ function GoalsView({
           width: `${treeWidth}px`,
           minWidth: `${treeWidth}px`,
         }}
-      >
-        <button
-          draggable
-          onDragStart={(e) => {
-            e.stopPropagation();
-            e.dataTransfer.setData(
-              "text/plain",
-              JSON.stringify({ type: "goal", id: goal.id })
-            );
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try {
-              const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-              if (data.type === "goal") onSetGoalParent(data.id, goal.id);
-            } catch {}
-          }}
-          onClick={() => setSelectedGoalId(goal.id)}
-          className={cx(
-            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
-            archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
-            depth === 0 && "min-h-[145px]",
-            selectedGoalId === goal.id && "ring-1 ring-emerald-300"
-          )}
+          <button
+            draggable
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify({ type: "goal", id: goal.id })
+              );
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+                if (data.type === "goal") onSetGoalParent(data.id, goal.id);
+              } catch {}
+            }}
+            onClick={() => setSelectedGoalId(goal.id)}
+            className={cx(
+              "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
+              archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
+              depth === 0 && "min-h-[145px]",
+              selectedGoalId === goal.id && "ring-1 ring-emerald-300"
+            )}
             style={{
               width: "100%",
               minWidth: `${GOAL_MIN_WIDTH}px`,
             }}
-          }}
-        >
+          >
           <div
             className={cx(
               "absolute bottom-0 left-0 right-0",
