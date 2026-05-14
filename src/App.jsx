@@ -68,6 +68,11 @@ const THEMES = {
     text: "#f4f4f5",
     muted: "#a1a1aa",
     border: "#27272a",
+    hover: "#27272a",
+    menu: "#191919",
+    overlay: "rgba(0, 0, 0, 0.70)",
+    accentText: "#ffffff",
+    accentGlow: "rgba(16, 185, 129, 0.70)",
   },
   stark: {
     id: "stark",
@@ -83,6 +88,11 @@ const THEMES = {
     text: "#f4f8fb",
     muted: "#a8b3bd",
     border: "#2a313b",
+    hover: "#222b37",
+    menu: "#171d26",
+    overlay: "rgba(0, 0, 0, 0.70)",
+    accentText: "#071018",
+    accentGlow: "rgba(90, 215, 255, 0.70)",
   },
   "walter-white": {
     id: "walter-white",
@@ -98,6 +108,11 @@ const THEMES = {
     text: "#1f1b16",
     muted: "#6b6254",
     border: "#d8c8a8",
+    hover: "#eadfca",
+    menu: "#fffaf0",
+    overlay: "rgba(52, 39, 18, 0.28)",
+    accentText: "#1f1b16",
+    accentGlow: "rgba(196, 147, 47, 0.60)",
   },
 };
 
@@ -1224,12 +1239,8 @@ export default function App() {
       { label: "Create Subgoal", action: () => setModal({ type: "goal", mode: "new", parentId: selectedGoalId }), disabled: !selectedGoalId },
       { label: "Delete Current Goal", action: () => deleteGoal(), disabled: !selectedGoalId },
     ],
-    preferences: [
-      { label: "Theme...", action: () => setModal({ type: "preferences" }) },
-      { divider: true },
-      { label: "Street Ninja", action: () => setThemeId("street-ninja"), hint: themeId === "street-ninja" ? "current" : "" },
-      { label: "Stark", action: () => setThemeId("stark"), hint: themeId === "stark" ? "current" : "" },
-      { label: "Walter White", action: () => setThemeId("walter-white"), hint: themeId === "walter-white" ? "current" : "" },
+    themes: [
+      { label: "Themes...", action: () => setModal({ type: "themes" }) },
     ],
     license: [
       { label: "Local Prototype License", action: () => alert("Spiketrain prototype. Workspace data is saved in this browser automatically and can also be exported as JSON.") },
@@ -1245,29 +1256,36 @@ export default function App() {
   };
 
   return (
-    <div className={`w-full min-h-screen bg-[#111111] text-zinc-100 font-sans text-sm overflow-hidden custom-scrollbars theme-${theme.mode}`} style={{ "--accent": theme.accent, "--accent-soft": theme.accentSoft, "--page": theme.page, "--panel": theme.panel, "--panel-2": theme.panel2, "--input": theme.input, "--app-text": theme.text, "--muted-text": theme.muted, "--app-border": theme.border }}>
+    <div className={`w-full min-h-screen bg-[#111111] text-zinc-100 font-sans text-sm overflow-hidden custom-scrollbars theme-${theme.mode}`} style={{ "--accent": theme.accent, "--accent-soft": theme.accentSoft, "--accent-text": theme.accentText, "--accent-glow": theme.accentGlow, "--page": theme.page, "--panel": theme.panel, "--panel-2": theme.panel2, "--input": theme.input, "--app-text": theme.text, "--muted-text": theme.muted, "--app-border": theme.border, "--hover": theme.hover, "--menu": theme.menu, "--overlay": theme.overlay }}>
       <style>{`
         .custom-scrollbars *::-webkit-scrollbar { width: 10px; height: 10px; }
-        .custom-scrollbars *::-webkit-scrollbar-track { background: #111111; }
-        .custom-scrollbars *::-webkit-scrollbar-thumb { background: #333333; border: 1px solid #181818; border-radius: 0; }
-        .custom-scrollbars *::-webkit-scrollbar-thumb:hover { background: #444444; }
-        .custom-scrollbars * { scrollbar-color: #333333 #111111; scrollbar-width: thin; }
+        .custom-scrollbars *::-webkit-scrollbar-track { background: var(--page); }
+        .custom-scrollbars *::-webkit-scrollbar-thumb { background: var(--app-border); border: 1px solid var(--panel); border-radius: 0; }
+        .custom-scrollbars *::-webkit-scrollbar-thumb:hover { background: var(--muted-text); }
+        .custom-scrollbars * { scrollbar-color: var(--app-border) var(--page); scrollbar-width: thin; }
 
         .custom-scrollbars { background: var(--page) !important; color: var(--app-text) !important; }
-        .custom-scrollbars .bg-\[\#111111\], .custom-scrollbars.bg-\[\#111111\] { background: var(--page) !important; }
-        .custom-scrollbars .bg-\[\#141414\], .custom-scrollbars .bg-\[\#151515\] { background: var(--panel) !important; }
-        .custom-scrollbars .bg-\[\#171717\], .custom-scrollbars .bg-\[\#191919\], .custom-scrollbars .bg-\[\#1a1a1a\], .custom-scrollbars .bg-\[\#1d1d1d\] { background: var(--panel-2) !important; }
-        .custom-scrollbars .bg-\[\#101010\], .custom-scrollbars .bg-\[\#0d0d0d\], .custom-scrollbars .bg-zinc-900, .custom-scrollbars .bg-zinc-950 { background: var(--input) !important; }
+        .custom-scrollbars[class~="bg-[#111111]"], .custom-scrollbars [class~="bg-[#111111]"] { background: var(--page) !important; }
+        .custom-scrollbars [class~="bg-[#141414]"], .custom-scrollbars [class~="bg-[#151515]"] { background: var(--panel) !important; }
+        .custom-scrollbars [class~="bg-[#171717]"], .custom-scrollbars [class~="bg-[#191919]"], .custom-scrollbars [class~="bg-[#1a1a1a]"], .custom-scrollbars [class~="bg-[#1d1d1d]"] { background: var(--panel-2) !important; }
+        .custom-scrollbars [class~="bg-[#101010]"], .custom-scrollbars [class~="bg-[#0d0d0d]"], .custom-scrollbars .bg-zinc-900, .custom-scrollbars .bg-zinc-950 { background: var(--input) !important; }
+        .custom-scrollbars [class~="bg-black/70"] { background: var(--overlay) !important; }
         .custom-scrollbars .border-zinc-800, .custom-scrollbars .border-zinc-900, .custom-scrollbars .border-zinc-700 { border-color: var(--app-border) !important; }
         .custom-scrollbars .text-zinc-100, .custom-scrollbars .text-zinc-200, .custom-scrollbars .text-white { color: var(--app-text) !important; }
-        .custom-scrollbars .text-zinc-300, .custom-scrollbars .text-zinc-400, .custom-scrollbars .text-zinc-500 { color: var(--muted-text) !important; }
-        .custom-scrollbars .bg-emerald-600, .custom-scrollbars .bg-emerald-700, .custom-scrollbars .bg-emerald-400, .custom-scrollbars .bg-emerald-300, .custom-scrollbars .bg-emerald-200 { background: var(--accent) !important; }
-        .custom-scrollbars .bg-emerald-950, .custom-scrollbars .bg-emerald-950\/40 { background: var(--accent-soft) !important; }
-        .custom-scrollbars .border-emerald-500, .custom-scrollbars .border-emerald-600, .custom-scrollbars .border-emerald-700, .custom-scrollbars .ring-emerald-300, .custom-scrollbars .focus\:border-emerald-700:focus, .custom-scrollbars .hover\:border-emerald-600:hover, .custom-scrollbars .hover\:border-emerald-700:hover { border-color: var(--accent) !important; --tw-ring-color: var(--accent) !important; }
-        .custom-scrollbars .text-emerald-100\/70, .custom-scrollbars .text-emerald-200, .custom-scrollbars .text-emerald-300, .custom-scrollbars .text-emerald-400, .custom-scrollbars .hover\:text-emerald-300:hover, .custom-scrollbars .hover\:text-emerald-400:hover { color: var(--accent) !important; }
-        .theme-light .hover\:bg-zinc-800:hover, .theme-light .bg-zinc-800 { background: #eadfca !important; }
+        .custom-scrollbars .text-zinc-300, .custom-scrollbars .text-zinc-400, .custom-scrollbars .text-zinc-500, .custom-scrollbars .text-zinc-600 { color: var(--muted-text) !important; }
+        .custom-scrollbars .bg-emerald-600, .custom-scrollbars .bg-emerald-700, .custom-scrollbars .bg-emerald-400, .custom-scrollbars .bg-emerald-300, .custom-scrollbars .bg-emerald-200 { background: var(--accent) !important; color: var(--accent-text) !important; }
+        .custom-scrollbars [class~="hover:bg-emerald-500"]:hover, .custom-scrollbars [class~="hover:bg-emerald-600"]:hover, .custom-scrollbars [class~="hover:bg-emerald-700"]:hover { background: color-mix(in srgb, var(--accent) 86%, black) !important; color: var(--accent-text) !important; }
+        .custom-scrollbars .bg-emerald-950, .custom-scrollbars [class~="bg-emerald-950/40"] { background: var(--accent-soft) !important; }
+        .custom-scrollbars .border-emerald-500, .custom-scrollbars .border-emerald-600, .custom-scrollbars .border-emerald-700, .custom-scrollbars .ring-emerald-300, .custom-scrollbars [class~="focus:border-emerald-700"]:focus, .custom-scrollbars [class~="hover:border-emerald-600"]:hover, .custom-scrollbars [class~="hover:border-emerald-700"]:hover { border-color: var(--accent) !important; --tw-ring-color: var(--accent) !important; }
+        .custom-scrollbars [class~="text-emerald-100/70"], .custom-scrollbars .text-emerald-200, .custom-scrollbars .text-emerald-300, .custom-scrollbars .text-emerald-400, .custom-scrollbars [class~="hover:text-emerald-300"]:hover, .custom-scrollbars [class~="hover:text-emerald-400"]:hover { color: var(--accent) !important; }
+        .custom-scrollbars input:focus, .custom-scrollbars textarea:focus, .custom-scrollbars select:focus { border-color: var(--accent) !important; outline: none; }
+        .custom-scrollbars button:hover:not(:disabled) { border-color: var(--app-border); }
+        .custom-scrollbars [class~="hover:bg-zinc-800"]:hover, .custom-scrollbars .bg-zinc-800 { background: var(--hover) !important; }
+        .custom-scrollbars .bg-zinc-600 { background: color-mix(in srgb, var(--muted-text) 44%, transparent) !important; }
+        .custom-scrollbars [class~="shadow-[0_0_12px_rgba(52,211,153,.7)]"], .custom-scrollbars [class~="shadow-[0_0_14px_rgba(52,211,153,.8)]"] { box-shadow: 0 0 12px var(--accent-glow) !important; }
         .theme-light select, .theme-light input, .theme-light textarea, .theme-light button { color: var(--app-text); }
-        .theme-light .shadow-\[0_0_12px_rgba\(52\,211\,153\,\.7\)\], .theme-light .shadow-\[0_0_14px_rgba\(52\,211\,153\,\.8\)\] { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent) !important; }
+        .theme-light .bg-emerald-600, .theme-light .bg-emerald-700, .theme-light .bg-emerald-400, .theme-light .bg-emerald-300, .theme-light .bg-emerald-200 { color: var(--accent-text) !important; }
+        .theme-light [class~="disabled:bg-[#0d0d0d]"]:disabled { background: color-mix(in srgb, var(--input) 70%, var(--app-border)) !important; }
       `}</style>
       <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={(e) => importWorkspace(e.target.files?.[0])} />
       <div className="h-screen grid grid-cols-[200px_1fr] grid-rows-[40px_1fr_280px]">
@@ -1314,7 +1332,7 @@ export default function App() {
             <Menu label="Goals" items={menuItems.goals} disabled={view !== "goals"} />
             <Menu label="Spikes" items={menuItems.spikes} disabled={view !== "spikes"} />
             <Menu label="Sessions" items={menuItems.sessions} />
-            <Menu label="Preferences" items={menuItems.preferences} />
+            <Menu label="Themes" items={menuItems.themes} />
             <Menu label="License" items={menuItems.license} />
             <Menu label="Help" items={menuItems.help} />
           </nav>
@@ -1372,7 +1390,7 @@ export default function App() {
       {modal?.type === "session" && <SessionDialog session={allSessions.find((session) => session.id === selectedSessionId)} onSave={saveSession} onClose={() => setModal(null)} />}
       {modal?.type === "help" && <HelpDialog topic={modal.topic} onClose={() => setModal(null)} />}
       {modal?.type === "about" && <AboutDialog onClose={() => setModal(null)} />}
-      {modal?.type === "preferences" && <PreferencesDialog themeId={themeId} setThemeId={setThemeId} onClose={() => setModal(null)} />}
+      {modal?.type === "themes" && <ThemesDialog themeId={themeId} setThemeId={setThemeId} onClose={() => setModal(null)} />}
       {modal?.type === "noSessionWarning" && (
         <NoSessionWarningDialog
           onContinue={(dontShowAgain) => {
@@ -1885,9 +1903,9 @@ function SessionDialog({ session, onSave, onClose }) {
 }
 
 
-function PreferencesDialog({ themeId, setThemeId, onClose }) {
+function ThemesDialog({ themeId, setThemeId, onClose }) {
   return (
-    <Modal title="Preferences" onClose={onClose} width="max-w-2xl">
+    <Modal title="Themes" onClose={onClose} width="max-w-2xl">
       <div className="space-y-3">
         <div>
           <div className="text-xs text-zinc-300 mb-2">Theme</div>
@@ -1913,7 +1931,7 @@ function PreferencesDialog({ themeId, setThemeId, onClose }) {
           </div>
         </div>
         <div className="text-xs text-zinc-400 border border-zinc-800 bg-zinc-950 p-2">
-          Preferences are saved automatically with this browser workspace.
+          Theme selection is saved automatically with this browser workspace.
         </div>
         <div className="flex justify-end"><Button active onClick={onClose}>Done</Button></div>
       </div>
