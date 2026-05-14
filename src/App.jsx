@@ -1671,8 +1671,9 @@ function GoalsView({
     }
 
     const childrenWidth =
-      children.reduce((sum, child) => sum + getGoalTreeWidth(child, depth + 1), 0) +
-      Math.max(0, children.length - 1) * GOAL_GAP;
+      children.reduce((sum, child) => {
+        return sum + getGoalTreeWidth(child, depth + 1);
+      }, 0) + Math.max(0, children.length - 1) * GOAL_GAP;
 
     return Math.max(GOAL_MIN_WIDTH, childrenWidth);
   };
@@ -1691,46 +1692,57 @@ function GoalsView({
           width: `${treeWidth}px`,
           minWidth: `${treeWidth}px`,
         }}
-          <button
-            draggable
-            onDragStart={(e) => {
-              e.stopPropagation();
-              e.dataTransfer.setData(
-                "text/plain",
-                JSON.stringify({ type: "goal", id: goal.id })
-              );
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try {
-                const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-                if (data.type === "goal") onSetGoalParent(data.id, goal.id);
-              } catch {}
-            }}
-            onClick={() => setSelectedGoalId(goal.id)}
-            className={cx(
-              "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
-              archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
-              depth === 0 && "min-h-[145px]",
-              selectedGoalId === goal.id && "ring-1 ring-emerald-300"
-            )}
-            style={{
-              width: "100%",
-              minWidth: `${GOAL_MIN_WIDTH}px`,
-            }}
-          >
+      >
+        <button
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData(
+              "text/plain",
+              JSON.stringify({ type: "goal", id: goal.id })
+            );
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            try {
+              const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+
+              if (data.type === "goal") {
+                onSetGoalParent(data.id, goal.id);
+              }
+            } catch {}
+          }}
+          onClick={() => setSelectedGoalId(goal.id)}
+          className={cx(
+            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
+            archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
+            depth === 0 && "min-h-[145px]",
+            selectedGoalId === goal.id && "ring-1 ring-emerald-300"
+          )}
+          style={{
+            width: "100%",
+            minWidth: `${GOAL_MIN_WIDTH}px`,
+          }}
+        >
           <div
             className={cx(
               "absolute bottom-0 left-0 right-0",
               archived ? "bg-zinc-600" : "bg-emerald-600"
             )}
-            style={{ height: `${Math.max(10, value)}%` }}
+            style={{
+              height: `${Math.max(10, value)}%`,
+            }}
           />
 
           <div className="absolute top-2 left-2 text-[10px] text-emerald-100/70">
-            {archived ? "archived" : depth === 0 ? "top goal" : `child level ${depth}`}
+            {archived
+              ? "archived"
+              : depth === 0
+                ? "top goal"
+                : `child level ${depth}`}
           </div>
 
           <div className="relative z-10 w-full p-3 flex items-end justify-between gap-2">
@@ -1753,16 +1765,18 @@ function GoalsView({
   );
 
   const totalRootWidth =
-    roots.reduce((sum, root) => sum + getGoalTreeWidth(root, 0), 0) +
-    Math.max(0, roots.length - 1) * GOAL_GAP;
+    roots.reduce((sum, root) => {
+      return sum + getGoalTreeWidth(root, 0);
+    }, 0) + Math.max(0, roots.length - 1) * GOAL_GAP;
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-2 overflow-hidden">
       <div className="shrink-0 flex items-end justify-between px-1">
         <h1 className="text-base">Workspace Goals</h1>
+
         <div className="text-xs text-zinc-500">
-          Top-level goals split horizontal space. Child goals descend underneath. Archived
-          goals stay visible but do not feed parents.
+          Top-level goals split horizontal space. Child goals descend underneath.
+          Archived goals stay visible but do not feed parents.
         </div>
       </div>
 
@@ -1771,9 +1785,13 @@ function GoalsView({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
+
           try {
             const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-            if (data.type === "goal") onSetGoalParent(data.id, null);
+
+            if (data.type === "goal") {
+              onSetGoalParent(data.id, null);
+            }
           } catch {}
         }}
       >
@@ -1785,9 +1803,13 @@ function GoalsView({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
+
           try {
             const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-            if (data.type === "goal") onSetGoalParent(data.id, null);
+
+            if (data.type === "goal") {
+              onSetGoalParent(data.id, null);
+            }
           } catch {}
         }}
       >
