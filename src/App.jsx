@@ -1660,7 +1660,7 @@ function GoalsView({
   onSetGoalParent,
   onAddGoal,
 }) {
-  const GOAL_MIN_WIDTH = 140;
+  const GOAL_MIN_WIDTH = 150;
   const GOAL_GAP = 8;
 
   const getGoalTreeWidth = (goal, depth = 0) => {
