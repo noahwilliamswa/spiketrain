@@ -50,6 +50,103 @@ const roundUpToNextHour = (date) => {
   return next;
 };
 const formatTimeTick = (date) => date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+const STORAGE_KEY = "spiketrain.workspace.v1";
+
+const THEMES = {
+  "street-ninja": {
+    id: "street-ninja",
+    name: "Street Ninja",
+    description: "The original dark Spiketrain look with neon green signal accents.",
+    mode: "dark",
+    accent: "#10b981",
+    accentSoft: "rgba(16, 185, 129, 0.22)",
+    page: "#111111",
+    panel: "#141414",
+    panel2: "#171717",
+    input: "#101010",
+    text: "#f4f4f5",
+    muted: "#a1a1aa",
+    border: "#27272a",
+  },
+  stark: {
+    id: "stark",
+    name: "Stark",
+    description: "A colder dark interface with electric blue signal accents.",
+    mode: "dark",
+    accent: "#5AD7FF",
+    accentSoft: "rgba(90, 215, 255, 0.22)",
+    page: "#101216",
+    panel: "#151922",
+    panel2: "#181d27",
+    input: "#0d1117",
+    text: "#f4f8fb",
+    muted: "#a8b3bd",
+    border: "#2a313b",
+  },
+  "walter-white": {
+    id: "walter-white",
+    name: "Walter White",
+    description: "A light lab-notebook theme with sandy/gold accents.",
+    mode: "light",
+    accent: "#c4932f",
+    accentSoft: "rgba(196, 147, 47, 0.20)",
+    page: "#f3efe4",
+    panel: "#fffaf0",
+    panel2: "#f8f0dd",
+    input: "#fffdf7",
+    text: "#1f1b16",
+    muted: "#6b6254",
+    border: "#d8c8a8",
+  },
+};
+
+const getTheme = (themeId) => THEMES[themeId] || THEMES["street-ninja"];
+const safeReadWorkspace = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data.projects || !data.tasks || !data.goals || !data.columns) return null;
+    return data;
+  } catch {
+    return null;
+  }
+};
+
+const sessionStartDateTime = (session) => {
+  if (!session) return new Date(0);
+  const date = session.date || todayISO();
+  const time = session.startedAt || "00:00:00";
+  const parsed = new Date(`${date}T${time}`);
+  return Number.isNaN(parsed.getTime()) ? parseDateTime(date) : parsed;
+};
+
+const sortSessionsByStartDesc = (items) =>
+  [...items].sort((a, b) => sessionStartDateTime(b).getTime() - sessionStartDateTime(a).getTime());
+
+const shiftSessionSpikesToNewStart = (previousSession, nextSession) => {
+  const previousStart = sessionStartDateTime(previousSession);
+  const nextStart = sessionStartDateTime(nextSession);
+  const changed = previousStart.getTime() !== nextStart.getTime();
+  if (!changed) return nextSession;
+
+  return {
+    ...nextSession,
+    spikes: (nextSession.spikes || []).map((spike) => {
+      const original = parseDateTime(getSpikeTimestamp(spike));
+      const offset = Number.isNaN(original.getTime()) ? 0 : original.getTime() - previousStart.getTime();
+      const shifted = new Date(nextStart.getTime() + offset);
+      return {
+        ...spike,
+        createdAt: shifted.toISOString(),
+        timestamp: spike.timestamp ? shifted.toISOString() : spike.timestamp,
+        date: shifted.toISOString().slice(0, 10),
+      };
+    }),
+  };
+};
 function demoTimestamp(hoursAgo, minutesOffset = 0) {
   const date = addHours(nowDate(), -hoursAgo);
   date.setMinutes(Math.max(0, Math.min(59, minutesOffset)), 0, 0);
@@ -613,22 +710,24 @@ function InlineEditor({ value, onSave, className = "", inputClassName = "", text
 }
 
 export default function App() {
-  const [workspaceTitle, setWorkspaceTitle] = useState(initialWorkspace.title);
+  const storedWorkspace = useMemo(() => safeReadWorkspace(), []);
+  const initialData = storedWorkspace || initialWorkspace;
+  const [workspaceTitle, setWorkspaceTitle] = useState(initialData.workspaceTitle || initialData.title);
   const [view, setView] = useState("work");
-  const [projects, setProjects] = useState(initialWorkspace.projects);
-  const [columns, setColumns] = useState(initialWorkspace.columns);
-  const [goals, setGoals] = useState(initialWorkspace.goals);
-  const [tasks, setTasks] = useState(initialWorkspace.tasks);
-  const [sessions, setSessions] = useState(initialWorkspace.sessions);
-  const [selectedProjectId, setSelectedProjectId] = useState("demo-project");
-  const [selectedTaskId, setSelectedTaskId] = useState("task-open-work");
-  const [selectedGoalId, setSelectedGoalId] = useState("goal-tour");
-  const [selectedSessionId, setSelectedSessionId] = useState("session-demo-3");
+  const [projects, setProjects] = useState(initialData.projects);
+  const [columns, setColumns] = useState(initialData.columns);
+  const [goals, setGoals] = useState(initialData.goals);
+  const [tasks, setTasks] = useState(initialData.tasks);
+  const [sessions, setSessions] = useState(sortSessionsByStartDesc(initialData.sessions || []));
+  const [selectedProjectId, setSelectedProjectId] = useState(initialData.selectedProjectId || initialData.projects?.[0]?.id || null);
+  const [selectedTaskId, setSelectedTaskId] = useState(initialData.selectedTaskId || initialData.tasks?.[0]?.id || null);
+  const [selectedGoalId, setSelectedGoalId] = useState(initialData.selectedGoalId || initialData.goals?.[0]?.id || null);
+  const [selectedSessionId, setSelectedSessionId] = useState(initialData.selectedSessionId || initialData.sessions?.[0]?.id || null);
   const [activeSession, setActiveSession] = useState(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerPaused, setTimerPaused] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
-  const [bottomPanels, setBottomPanels] = useState(["task", "session", "tracker"]);
+  const [bottomPanels, setBottomPanels] = useState(initialData.bottomPanels || ["task", "session", "tracker"]);
   const [hoveredSessionId, setHoveredSessionId] = useState(null);
   const [dateRange, setDateRange] = useState("1w");
   const [spikeMode, setSpikeMode] = useState("projects");
@@ -637,6 +736,8 @@ export default function App() {
   const [workspaceTitleEditing, setWorkspaceTitleEditing] = useState(false);
   const [suppressNoSessionWarning, setSuppressNoSessionWarning] = useState(false);
   const [pendingTaskMove, setPendingTaskMove] = useState(null);
+  const [themeId, setThemeId] = useState(initialData.themeId || "street-ninja");
+  const theme = getTheme(themeId);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -645,7 +746,28 @@ export default function App() {
     return () => clearInterval(id);
   }, [activeSession, timerPaused]);
 
-  const allSessions = activeSession ? [activeSession, ...sessions] : sessions;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const data = {
+      workspaceTitle,
+      projects,
+      columns,
+      goals,
+      tasks,
+      sessions,
+      bottomPanels,
+      selectedProjectId,
+      selectedTaskId,
+      selectedGoalId,
+      selectedSessionId,
+      themeId,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [workspaceTitle, projects, columns, goals, tasks, sessions, bottomPanels, selectedProjectId, selectedTaskId, selectedGoalId, selectedSessionId, themeId]);
+
+  const allSessions = sortSessionsByStartDesc(activeSession ? [activeSession, ...sessions] : sessions);
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || projects[0];
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || tasks[0];
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) || goals[0];
@@ -710,7 +832,7 @@ export default function App() {
     const map = { "24h": 1, "1w": 7, "2w": 14, "1m": 31, "3m": 92, "6m": 183 };
     const days = map[dateRange] || 7;
     if (dateRange === "24h") {
-      const end = roundUpToNextHour(nowDate());
+      const end = nowDate();
       const start = addHours(end, -24);
       return { start, end, days: 1, label: dateRange };
     }
@@ -719,7 +841,7 @@ export default function App() {
     return { start, end, days: Math.max(1, Math.ceil(days)), label: dateRange };
   }, [dateRange, customRange, allSessions]);
 
-  const workspaceExport = () => ({ workspaceTitle, projects, columns, goals, tasks, sessions, bottomPanels, exportedAt: new Date().toISOString() });
+  const workspaceExport = () => ({ workspaceTitle, projects, columns, goals, tasks, sessions, bottomPanels, selectedProjectId, selectedTaskId, selectedGoalId, selectedSessionId, themeId, exportedAt: new Date().toISOString() });
 
   const exportWorkspace = () => {
     const blob = new Blob([JSON.stringify(workspaceExport(), null, 2)], { type: "application/json" });
@@ -743,11 +865,13 @@ export default function App() {
         setColumns(data.columns);
         setGoals(data.goals);
         setTasks(data.tasks);
-        setSessions(data.sessions || []);
+        setSessions(sortSessionsByStartDesc(data.sessions || []));
         if (data.bottomPanels) setBottomPanels(data.bottomPanels);
-        setSelectedProjectId(data.projects[0]?.id || null);
-        setSelectedTaskId(data.tasks[0]?.id || null);
-        setSelectedGoalId(data.goals[0]?.id || null);
+        if (data.themeId) setThemeId(data.themeId);
+        setSelectedProjectId(data.selectedProjectId || data.projects[0]?.id || null);
+        setSelectedTaskId(data.selectedTaskId || data.tasks[0]?.id || null);
+        setSelectedGoalId(data.selectedGoalId || data.goals[0]?.id || null);
+        setSelectedSessionId(data.selectedSessionId || data.sessions?.[0]?.id || null);
         setView("work");
       } catch (error) {
         alert("Import failed. This does not look like a valid Spiketrain workspace export.");
@@ -847,6 +971,45 @@ export default function App() {
     setModal({ type: "confirmDelete", entity: "task", id });
   };
 
+
+  const duplicateCurrentProject = () => {
+    const source = projects.find((project) => project.id === selectedProjectId);
+    if (!source) return;
+    const newProjectId = uid();
+    const copiedProject = {
+      ...source,
+      id: newProjectId,
+      title: `${source.title} Copy`,
+    };
+    const copiedTasks = tasks
+      .filter((task) => task.projectId === source.id)
+      .map((task) => ({
+        ...task,
+        id: uid(),
+        projectId: newProjectId,
+        title: `${task.title} Copy`,
+      }));
+    setProjects((current) => [...current, copiedProject]);
+    setTasks((current) => [...current, ...copiedTasks]);
+    setSelectedProjectId(newProjectId);
+    setSelectedTaskId(copiedTasks[0]?.id || null);
+    setView("work");
+  };
+
+  const duplicateCurrentTask = () => {
+    const source = tasks.find((task) => task.id === selectedTaskId);
+    if (!source) return;
+    const copiedTask = {
+      ...source,
+      id: uid(),
+      title: `${source.title} Copy`,
+    };
+    setTasks((current) => [...current, copiedTask]);
+    setSelectedTaskId(copiedTask.id);
+    setSelectedProjectId(copiedTask.projectId);
+    setView("work");
+  };
+
   const saveColumn = (column) => {
     setColumns((current) => current.some((c) => c.id === column.id) ? current.map((c) => c.id === column.id ? column : c) : [...current, column]);
   };
@@ -927,7 +1090,7 @@ export default function App() {
   const endSession = () => {
     if (!activeSession) return;
     const finished = { ...activeSession, note: sessionNotes, lengthSeconds: timerSeconds };
-    setSessions((current) => [finished, ...current]);
+    setSessions((current) => sortSessionsByStartDesc([finished, ...current]));
     setSelectedSessionId(finished.id);
     setActiveSession(null);
     setSessionNotes("");
@@ -938,10 +1101,14 @@ export default function App() {
   const saveSession = (session) => {
     if (!session) return;
     if (activeSession?.id === session.id) {
-      setActiveSession((current) => ({ ...current, ...session }));
-      setSessionNotes(session.note || "");
+      const shifted = shiftSessionSpikesToNewStart(activeSession, { ...activeSession, ...session });
+      setActiveSession(shifted);
+      setSessionNotes(shifted.note || "");
     } else {
-      setSessions((current) => current.map((item) => item.id === session.id ? session : item));
+      setSessions((current) => sortSessionsByStartDesc(current.map((item) => {
+        if (item.id !== session.id) return item;
+        return shiftSessionSpikesToNewStart(item, session);
+      })));
     }
     setSelectedSessionId(session.id);
     setModal(null);
@@ -1021,15 +1188,18 @@ export default function App() {
       { divider: true },
       { label: "Import Workspace", action: () => fileInputRef.current?.click(), hint: ".json" },
       { label: "Export Workspace", action: exportWorkspace, hint: "json" },
+      { label: "Save Workspace to Browser", action: () => { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspaceExport())); alert("Workspace saved to this browser."); }, hint: "local" },
     ],
     projects: [
       { label: "New Project", action: () => setModal({ type: "project", mode: "new" }) },
       { label: "Edit Current Project", action: () => setModal({ type: "project", mode: "edit", id: selectedProjectId }), disabled: !selectedProjectId },
+      { label: "Duplicate Current Project", action: duplicateCurrentProject, disabled: !selectedProjectId },
       { label: "Delete Current Project", action: () => deleteProject(), disabled: !selectedProjectId },
     ],
     tasks: [
       { label: "New Task", action: () => setModal({ type: "task", mode: "new" }) },
       { label: "Edit Current Task", action: () => setModal({ type: "task", mode: "edit", id: selectedTaskId }), disabled: !selectedTaskId },
+      { label: "Duplicate Current Task", action: duplicateCurrentTask, disabled: !selectedTaskId },
       { label: "Delete Current Task", action: () => deleteTask(), disabled: !selectedTaskId },
     ],
     spikes: [
@@ -1054,8 +1224,15 @@ export default function App() {
       { label: "Create Subgoal", action: () => setModal({ type: "goal", mode: "new", parentId: selectedGoalId }), disabled: !selectedGoalId },
       { label: "Delete Current Goal", action: () => deleteGoal(), disabled: !selectedGoalId },
     ],
+    preferences: [
+      { label: "Theme...", action: () => setModal({ type: "preferences" }) },
+      { divider: true },
+      { label: "Street Ninja", action: () => setThemeId("street-ninja"), hint: themeId === "street-ninja" ? "current" : "" },
+      { label: "Stark", action: () => setThemeId("stark"), hint: themeId === "stark" ? "current" : "" },
+      { label: "Walter White", action: () => setThemeId("walter-white"), hint: themeId === "walter-white" ? "current" : "" },
+    ],
     license: [
-      { label: "Local Prototype License", action: () => alert("Spiketrain prototype. Workspace data is local to this preview unless exported.") },
+      { label: "Local Prototype License", action: () => alert("Spiketrain prototype. Workspace data is saved in this browser automatically and can also be exported as JSON.") },
       { label: "About Spiketra.in", action: () => setModal({ type: "about" }) },
     ],
     help: [
@@ -1068,13 +1245,29 @@ export default function App() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-[#111111] text-zinc-100 font-sans text-sm overflow-hidden custom-scrollbars">
+    <div className={`w-full min-h-screen bg-[#111111] text-zinc-100 font-sans text-sm overflow-hidden custom-scrollbars theme-${theme.mode}`} style={{ "--accent": theme.accent, "--accent-soft": theme.accentSoft, "--page": theme.page, "--panel": theme.panel, "--panel-2": theme.panel2, "--input": theme.input, "--app-text": theme.text, "--muted-text": theme.muted, "--app-border": theme.border }}>
       <style>{`
         .custom-scrollbars *::-webkit-scrollbar { width: 10px; height: 10px; }
         .custom-scrollbars *::-webkit-scrollbar-track { background: #111111; }
         .custom-scrollbars *::-webkit-scrollbar-thumb { background: #333333; border: 1px solid #181818; border-radius: 0; }
         .custom-scrollbars *::-webkit-scrollbar-thumb:hover { background: #444444; }
         .custom-scrollbars * { scrollbar-color: #333333 #111111; scrollbar-width: thin; }
+
+        .custom-scrollbars { background: var(--page) !important; color: var(--app-text) !important; }
+        .custom-scrollbars .bg-\[\#111111\], .custom-scrollbars.bg-\[\#111111\] { background: var(--page) !important; }
+        .custom-scrollbars .bg-\[\#141414\], .custom-scrollbars .bg-\[\#151515\] { background: var(--panel) !important; }
+        .custom-scrollbars .bg-\[\#171717\], .custom-scrollbars .bg-\[\#191919\], .custom-scrollbars .bg-\[\#1a1a1a\], .custom-scrollbars .bg-\[\#1d1d1d\] { background: var(--panel-2) !important; }
+        .custom-scrollbars .bg-\[\#101010\], .custom-scrollbars .bg-\[\#0d0d0d\], .custom-scrollbars .bg-zinc-900, .custom-scrollbars .bg-zinc-950 { background: var(--input) !important; }
+        .custom-scrollbars .border-zinc-800, .custom-scrollbars .border-zinc-900, .custom-scrollbars .border-zinc-700 { border-color: var(--app-border) !important; }
+        .custom-scrollbars .text-zinc-100, .custom-scrollbars .text-zinc-200, .custom-scrollbars .text-white { color: var(--app-text) !important; }
+        .custom-scrollbars .text-zinc-300, .custom-scrollbars .text-zinc-400, .custom-scrollbars .text-zinc-500 { color: var(--muted-text) !important; }
+        .custom-scrollbars .bg-emerald-600, .custom-scrollbars .bg-emerald-700, .custom-scrollbars .bg-emerald-400, .custom-scrollbars .bg-emerald-300, .custom-scrollbars .bg-emerald-200 { background: var(--accent) !important; }
+        .custom-scrollbars .bg-emerald-950, .custom-scrollbars .bg-emerald-950\/40 { background: var(--accent-soft) !important; }
+        .custom-scrollbars .border-emerald-500, .custom-scrollbars .border-emerald-600, .custom-scrollbars .border-emerald-700, .custom-scrollbars .ring-emerald-300, .custom-scrollbars .focus\:border-emerald-700:focus, .custom-scrollbars .hover\:border-emerald-600:hover, .custom-scrollbars .hover\:border-emerald-700:hover { border-color: var(--accent) !important; --tw-ring-color: var(--accent) !important; }
+        .custom-scrollbars .text-emerald-100\/70, .custom-scrollbars .text-emerald-200, .custom-scrollbars .text-emerald-300, .custom-scrollbars .text-emerald-400, .custom-scrollbars .hover\:text-emerald-300:hover, .custom-scrollbars .hover\:text-emerald-400:hover { color: var(--accent) !important; }
+        .theme-light .hover\:bg-zinc-800:hover, .theme-light .bg-zinc-800 { background: #eadfca !important; }
+        .theme-light select, .theme-light input, .theme-light textarea, .theme-light button { color: var(--app-text); }
+        .theme-light .shadow-\[0_0_12px_rgba\(52\,211\,153\,\.7\)\], .theme-light .shadow-\[0_0_14px_rgba\(52\,211\,153\,\.8\)\] { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent) !important; }
       `}</style>
       <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={(e) => importWorkspace(e.target.files?.[0])} />
       <div className="h-screen grid grid-cols-[200px_1fr] grid-rows-[40px_1fr_280px]">
@@ -1121,6 +1314,7 @@ export default function App() {
             <Menu label="Goals" items={menuItems.goals} disabled={view !== "goals"} />
             <Menu label="Spikes" items={menuItems.spikes} disabled={view !== "spikes"} />
             <Menu label="Sessions" items={menuItems.sessions} />
+            <Menu label="Preferences" items={menuItems.preferences} />
             <Menu label="License" items={menuItems.license} />
             <Menu label="Help" items={menuItems.help} />
           </nav>
@@ -1178,6 +1372,7 @@ export default function App() {
       {modal?.type === "session" && <SessionDialog session={allSessions.find((session) => session.id === selectedSessionId)} onSave={saveSession} onClose={() => setModal(null)} />}
       {modal?.type === "help" && <HelpDialog topic={modal.topic} onClose={() => setModal(null)} />}
       {modal?.type === "about" && <AboutDialog onClose={() => setModal(null)} />}
+      {modal?.type === "preferences" && <PreferencesDialog themeId={themeId} setThemeId={setThemeId} onClose={() => setModal(null)} />}
       {modal?.type === "noSessionWarning" && (
         <NoSessionWarningDialog
           onContinue={(dontShowAgain) => {
@@ -1433,10 +1628,14 @@ function SpikesView({ goals, projects, tasks, sessions, selectedSessionId, hover
     .sort((a, b) => b.points - a.points)[0];
 
   const ticks = dateRange === "24h"
-    ? Array.from({ length: 9 }, (_, i) => {
-        const tickDate = addHours(rangeWindow.start, i * 3);
-        return { key: tickDate.toISOString(), label: formatTimeTick(tickDate) };
-      })
+    ? (() => {
+        const axisEnd = roundUpToNextHour(rangeWindow.end);
+        const axisStart = addHours(axisEnd, -24);
+        return Array.from({ length: 9 }, (_, i) => {
+          const tickDate = addHours(axisStart, i * 3);
+          return { key: tickDate.toISOString(), label: formatTimeTick(tickDate) };
+        });
+      })()
     : Array.from({ length: Math.min(8, Math.max(2, rangeWindow.days)) }, (_, i) => {
         const tickCount = Math.min(8, Math.max(2, rangeWindow.days));
         const offset = Math.round((i / Math.max(1, tickCount - 1)) * Math.max(0, rangeWindow.days - 1));
@@ -1455,8 +1654,8 @@ function SpikesView({ goals, projects, tasks, sessions, selectedSessionId, hover
     if (range !== "custom" && range !== "all") {
       const map = { "24h": 1, "1w": 7, "2w": 14, "1m": 31, "3m": 92, "6m": 183 };
       const days = map[range] || 7;
-      const end = nowDate();
-      const start = addDays(end, -(days - 1));
+      const end = range === "24h" ? nowDate() : nowDate();
+      const start = range === "24h" ? addHours(end, -24) : addDays(end, -(days - 1));
       setCustomRange({ start: dateKey(start), end: dateKey(end) });
     }
   };
@@ -1680,6 +1879,43 @@ function SessionDialog({ session, onSave, onClose }) {
         <TextInput textarea label="Session Scratchpad / Notes" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
         <div className="text-xs text-zinc-400">Recorded spikes: {draft.spikes?.length || 0}</div>
         <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button active onClick={() => onSave(draft)}>Save Session</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
+
+function PreferencesDialog({ themeId, setThemeId, onClose }) {
+  return (
+    <Modal title="Preferences" onClose={onClose} width="max-w-2xl">
+      <div className="space-y-3">
+        <div>
+          <div className="text-xs text-zinc-300 mb-2">Theme</div>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.values(THEMES).map((theme) => (
+              <button
+                key={theme.id}
+                onClick={() => setThemeId(theme.id)}
+                className={cx(
+                  "border border-zinc-800 p-3 text-left hover:border-emerald-600",
+                  themeId === theme.id && "border-emerald-500 bg-emerald-950/40"
+                )}
+              >
+                <div className="h-10 border border-zinc-800 mb-2 flex overflow-hidden" style={{ background: theme.page }}>
+                  <div className="w-1/3" style={{ background: theme.panel2 }} />
+                  <div className="flex-1" style={{ background: theme.panel }} />
+                  <div className="w-3" style={{ background: theme.accent }} />
+                </div>
+                <div className="text-sm text-zinc-100">{theme.name}</div>
+                <div className="text-xs text-zinc-400 leading-5 mt-1">{theme.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-xs text-zinc-400 border border-zinc-800 bg-zinc-950 p-2">
+          Preferences are saved automatically with this browser workspace.
+        </div>
+        <div className="flex justify-end"><Button active onClick={onClose}>Done</Button></div>
       </div>
     </Modal>
   );
