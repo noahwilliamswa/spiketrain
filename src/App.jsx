@@ -1652,18 +1652,54 @@ function WorkView({ project, columns, tasks, selectedTaskId, onSelectTask, onMov
   );
 }
 
-function GoalsView({ goals, selectedGoalId, setSelectedGoalId, completion, onSetGoalParent, onAddGoal }) {
-  const renderGoal = (goal, siblingsCount, depth = 0) => {
+function GoalsView({
+  goals,
+  selectedGoalId,
+  setSelectedGoalId,
+  completion,
+  onSetGoalParent,
+  onAddGoal,
+}) {
+  const GOAL_MIN_WIDTH = 170;
+  const GOAL_GAP = 8;
+
+  const getGoalTreeWidth = (goal, depth = 0) => {
+    const children = goals.filter((g) => g.parentId === goal.id);
+
+    if (children.length === 0) {
+      return GOAL_MIN_WIDTH;
+    }
+
+    const childrenWidth =
+      children.reduce((sum, child) => sum + getGoalTreeWidth(child, depth + 1), 0) +
+      Math.max(0, children.length - 1) * GOAL_GAP;
+
+    return Math.max(GOAL_MIN_WIDTH, childrenWidth);
+  };
+
+  const renderGoal = (goal, depth = 0) => {
     const children = goals.filter((g) => g.parentId === goal.id);
     const value = completion(goal.id);
     const archived = goal.status === "Archived";
+    const treeWidth = getGoalTreeWidth(goal, depth);
+
     return (
-      <div key={goal.id} className="flex-1 min-w-[170px] flex flex-col gap-2">
+      <div
+        key={goal.id}
+        className="flex flex-col gap-2 shrink-0"
+        style={{
+          width: `${treeWidth}px`,
+          minWidth: `${treeWidth}px`,
+        }}
+      >
         <button
           draggable
           onDragStart={(e) => {
             e.stopPropagation();
-            e.dataTransfer.setData("text/plain", JSON.stringify({ type: "goal", id: goal.id }));
+            e.dataTransfer.setData(
+              "text/plain",
+              JSON.stringify({ type: "goal", id: goal.id })
+            );
           }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
@@ -1676,31 +1712,60 @@ function GoalsView({ goals, selectedGoalId, setSelectedGoalId, completion, onSet
           }}
           onClick={() => setSelectedGoalId(goal.id)}
           className={cx(
-            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing",
+            "relative overflow-hidden rounded-lg border border-zinc-900 text-left flex items-end min-h-[110px] cursor-grab active:cursor-grabbing shrink-0",
             archived ? "bg-zinc-900 opacity-60 grayscale" : "bg-emerald-950",
             depth === 0 && "min-h-[145px]",
             selectedGoalId === goal.id && "ring-1 ring-emerald-300"
           )}
+          style={{
+            width: `${GOAL_MIN_WIDTH}px`,
+            minWidth: `${GOAL_MIN_WIDTH}px`,
+            alignSelf: "center",
+          }}
         >
-          <div className={cx("absolute bottom-0 left-0 right-0", archived ? "bg-zinc-600" : "bg-emerald-600")} style={{ height: `${Math.max(10, value)}%` }} />
-          <div className="absolute top-2 left-2 text-[10px] text-emerald-100/70">{archived ? "archived" : depth === 0 ? "top goal" : `child level ${depth}`}</div>
+          <div
+            className={cx(
+              "absolute bottom-0 left-0 right-0",
+              archived ? "bg-zinc-600" : "bg-emerald-600"
+            )}
+            style={{ height: `${Math.max(10, value)}%` }}
+          />
+
+          <div className="absolute top-2 left-2 text-[10px] text-emerald-100/70">
+            {archived ? "archived" : depth === 0 ? "top goal" : `child level ${depth}`}
+          </div>
+
           <div className="relative z-10 w-full p-3 flex items-end justify-between gap-2">
             <div className="font-medium leading-4">{goal.title}</div>
             <div className="font-bold">{value}%</div>
           </div>
         </button>
-        {children.length > 0 && <div className="flex gap-2 items-stretch">{children.map((child) => renderGoal(child, children.length, depth + 1))}</div>}
+
+        {children.length > 0 && (
+          <div className="flex gap-2 items-start justify-center shrink-0">
+            {children.map((child) => renderGoal(child, depth + 1))}
+          </div>
+        )}
       </div>
     );
   };
 
-  const roots = goals.filter((g) => !g.parentId || !goals.some((candidate) => candidate.id === g.parentId));
+  const roots = goals.filter(
+    (g) => !g.parentId || !goals.some((candidate) => candidate.id === g.parentId)
+  );
+
+  const totalRootWidth =
+    roots.reduce((sum, root) => sum + getGoalTreeWidth(root, 0), 0) +
+    Math.max(0, roots.length - 1) * GOAL_GAP;
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-2 overflow-hidden">
       <div className="shrink-0 flex items-end justify-between px-1">
         <h1 className="text-base">Workspace Goals</h1>
-        <div className="text-xs text-zinc-500">Top-level goals split horizontal space. Child goals descend underneath. Archived goals stay visible but do not feed parents.</div>
+        <div className="text-xs text-zinc-500">
+          Top-level goals split horizontal space. Child goals descend underneath. Archived
+          goals stay visible but do not feed parents.
+        </div>
       </div>
 
       <div
@@ -1728,12 +1793,20 @@ function GoalsView({ goals, selectedGoalId, setSelectedGoalId, completion, onSet
           } catch {}
         }}
       >
-        <div className="flex gap-2 items-start min-w-[800px] min-h-full">
-          {roots.map((goal) => renderGoal(goal, roots.length, 0))}
+        <div
+          className="flex gap-2 items-start min-h-full"
+          style={{
+            minWidth: `${Math.max(800, totalRootWidth)}px`,
+          }}
+        >
+          {roots.map((goal) => renderGoal(goal, 0))}
         </div>
       </div>
 
-      <button onClick={onAddGoal} className="shrink-0 w-full h-10 border border-dashed border-zinc-800 hover:border-emerald-600 text-zinc-500 hover:text-emerald-400 flex items-center justify-center gap-2 text-xs">
+      <button
+        onClick={onAddGoal}
+        className="shrink-0 w-full h-10 border border-dashed border-zinc-800 hover:border-emerald-600 text-zinc-500 hover:text-emerald-400 flex items-center justify-center gap-2 text-xs"
+      >
         <span className="text-lg leading-none">{ICONS.plus}</span>
         Add Goal
       </button>
