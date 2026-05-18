@@ -577,6 +577,27 @@ const initialWorkspace = {
   ],
 };
 
+
+const cloneColumns = (columns = initialWorkspace.columns) =>
+  columns.map((column) => ({ ...column }));
+
+const ensureBaseColumns = (columns = []) => {
+  const next = cloneColumns(columns.length ? columns : initialWorkspace.columns);
+  if (!next.some((column) => column.id === "backlog")) {
+    next.unshift({ id: "backlog", title: "Backlog", contribution: 0, spikeWeight: 0 });
+  }
+  if (!next.some((column) => column.id === "complete")) {
+    next.push({ id: "complete", title: "Complete", contribution: 100, spikeWeight: 45 });
+  }
+  return next;
+};
+
+const withProjectColumns = (projects = [], fallbackColumns = initialWorkspace.columns) =>
+  projects.map((project) => ({
+    ...project,
+    columns: ensureBaseColumns(project.columns || fallbackColumns),
+  }));
+
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -854,7 +875,7 @@ export default function App() {
   const initialData = storedWorkspace || initialWorkspace;
   const [workspaceTitle, setWorkspaceTitle] = useState(initialData.workspaceTitle || initialData.title);
   const [view, setView] = useState("work");
-  const [projects, setProjects] = useState(initialData.projects);
+  const [projects, setProjects] = useState(withProjectColumns(initialData.projects, initialData.columns));
   const [columns, setColumns] = useState(initialData.columns);
   const [goals, setGoals] = useState(initialData.goals);
   const [tasks, setTasks] = useState(initialData.tasks);
@@ -912,10 +933,12 @@ export default function App() {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || tasks[0];
   const selectedGoal = goals.find((g) => g.id === selectedGoalId) || goals[0];
   const selectedSession = allSessions.find((s) => s.id === selectedSessionId) || allSessions[0];
+  const getColumnsForProject = (projectId) => projects.find((project) => project.id === projectId)?.columns || columns;
+  const selectedProjectColumns = getColumnsForProject(selectedProject?.id);
 
   const projectTasks = useMemo(() => tasks.filter((task) => task.projectId === selectedProjectId), [tasks, selectedProjectId]);
 
-  const getTaskContribution = (task) => columns.find((c) => c.id === task.statusId)?.contribution || 0;
+  const getTaskContribution = (task) => getColumnsForProject(task.projectId).find((c) => c.id === task.statusId)?.contribution || 0;
 
   const getGoalAndDescendantIds = (goalId, seen = new Set()) => {
     if (!goalId || seen.has(goalId)) return [];
@@ -1001,7 +1024,7 @@ export default function App() {
         const data = JSON.parse(reader.result);
         if (!data.projects || !data.tasks || !data.goals || !data.columns) throw new Error("Invalid workspace file");
         setWorkspaceTitle(data.workspaceTitle || "Imported Workspace");
-        setProjects(data.projects);
+        setProjects(withProjectColumns(data.projects, data.columns));
         setColumns(data.columns);
         setGoals(data.goals);
         setTasks(data.tasks);
@@ -1021,7 +1044,7 @@ export default function App() {
   };
 
   const clearAndCreateWorkspace = () => {
-    const p = { id: uid(), title: "New Project", description: "Describe the project..." };
+    const p = { id: uid(), title: "New Project", description: "Describe the project...", columns: cloneColumns(initialWorkspace.columns) };
     const g = { id: uid(), title: "New Goal", description: "Describe the goal...", createdAt: todayISO(), status: "Active", parentId: null };
     setWorkspaceTitle("Untitled Workspace");
     setProjects([p]);
@@ -1045,8 +1068,9 @@ export default function App() {
   const newWorkspace = () => setModal({ type: "newWorkspace" });
 
   const saveProject = (project) => {
-    setProjects((current) => current.some((p) => p.id === project.id) ? current.map((p) => p.id === project.id ? project : p) : [...current, project]);
-    setSelectedProjectId(project.id);
+    const normalizedProject = { ...project, columns: ensureBaseColumns(project.columns || columns) };
+    setProjects((current) => current.some((p) => p.id === normalizedProject.id) ? current.map((p) => p.id === normalizedProject.id ? normalizedProject : p) : [...current, normalizedProject]);
+    setSelectedProjectId(normalizedProject.id);
   };
 
   const updateProjectField = (projectId, field, value) => {
@@ -1120,6 +1144,7 @@ export default function App() {
       ...source,
       id: newProjectId,
       title: `${source.title} Copy`,
+      columns: cloneColumns(source.columns || columns),
     };
     const copiedTasks = tasks
       .filter((task) => task.projectId === source.id)
@@ -1151,18 +1176,43 @@ export default function App() {
   };
 
   const saveColumn = (column) => {
-    setColumns((current) => current.some((c) => c.id === column.id) ? current.map((c) => c.id === column.id ? column : c) : [...current, column]);
+    if (!selectedProjectId) return;
+    setProjects((current) => current.map((project) => {
+      if (project.id !== selectedProjectId) return project;
+      const projectColumns = ensureBaseColumns(project.columns || columns);
+      const nextColumn = { ...column };
+      const nextColumns = projectColumns.some((c) => c.id === nextColumn.id)
+        ? projectColumns.map((c) => c.id === nextColumn.id ? nextColumn : c)
+        : [...projectColumns, nextColumn];
+      return { ...project, columns: ensureBaseColumns(nextColumns) };
+    }));
   };
 
   const updateColumnField = (columnId, field, value) => {
-    setColumns((current) => current.map((column) => column.id === columnId ? { ...column, [field]: field === "title" ? value : Math.max(0, Number(value) || 0) } : column));
+    if (!selectedProjectId) return;
+    setProjects((current) => current.map((project) => {
+      if (project.id !== selectedProjectId) return project;
+      const projectColumns = ensureBaseColumns(project.columns || columns);
+      return {
+        ...project,
+        columns: projectColumns.map((column) =>
+          column.id === columnId
+            ? { ...column, [field]: field === "title" ? value : Math.max(0, Number(value) || 0) }
+            : column
+        ),
+      };
+    }));
   };
 
   const deleteColumn = (id) => {
-    if (["backlog", "progress", "complete"].includes(id)) return alert("Base states cannot be deleted.");
-    if (!window.confirm("Delete this column? Its tasks will move to Backlog.")) return;
-    setColumns((current) => current.filter((c) => c.id !== id));
-    setTasks((current) => current.map((task) => task.statusId === id ? { ...task, statusId: "backlog" } : task));
+    if (["backlog", "complete"].includes(id)) return alert("Backlog and Complete are required board states. You can rename them, but they cannot be deleted.");
+    if (!selectedProjectId) return;
+    if (!window.confirm("Delete this column? This project's tasks in that column will move to Backlog.")) return;
+    setProjects((current) => current.map((project) => {
+      if (project.id !== selectedProjectId) return project;
+      return { ...project, columns: ensureBaseColumns((project.columns || columns).filter((c) => c.id !== id)) };
+    }));
+    setTasks((current) => current.map((task) => task.projectId === selectedProjectId && task.statusId === id ? { ...task, statusId: "backlog" } : task));
   };
 
   const applyTaskMove = (taskId, statusId, targetTaskId = null) => {
@@ -1184,8 +1234,9 @@ export default function App() {
     });
 
     if (activeSession && statusChanged) {
-      const fromColumn = columns.find((c) => c.id === previous.statusId);
-      const toColumn = columns.find((c) => c.id === statusId);
+      const projectColumns = getColumnsForProject(previous.projectId);
+      const fromColumn = projectColumns.find((c) => c.id === previous.statusId);
+      const toColumn = projectColumns.find((c) => c.id === statusId);
       const createdAt = new Date().toISOString();
       const newSpike = {
         id: uid(),
@@ -1245,12 +1296,28 @@ export default function App() {
       setActiveSession(shifted);
       setSessionNotes(shifted.note || "");
     } else {
-      setSessions((current) => sortSessionsByStartDesc(current.map((item) => {
-        if (item.id !== session.id) return item;
-        return shiftSessionSpikesToNewStart(item, session);
-      })));
+      setSessions((current) => {
+        const existing = current.find((item) => item.id === session.id);
+        if (!existing) return sortSessionsByStartDesc([session, ...current]);
+        return sortSessionsByStartDesc(current.map((item) => {
+          if (item.id !== session.id) return item;
+          return shiftSessionSpikesToNewStart(item, session);
+        }));
+      });
     }
     setSelectedSessionId(session.id);
+    setModal(null);
+  };
+
+  const recordFromSession = (session) => {
+    if (!session) return;
+    const prepared = { ...session, spikes: session.spikes || [] };
+    setSessions((current) => current.filter((item) => item.id !== prepared.id));
+    setActiveSession(prepared);
+    setSessionNotes(prepared.note || "");
+    setTimerSeconds(Math.max(0, Number(prepared.lengthSeconds) || 0));
+    setTimerPaused(false);
+    setSelectedSessionId(prepared.id);
     setModal(null);
   };
 
@@ -1352,6 +1419,7 @@ export default function App() {
     ],
     sessions: [
       { label: "Start Session", action: startSession, disabled: !!activeSession },
+      { label: "Create Empty Session", action: () => setModal({ type: "session", mode: "new" }) },
       { label: timerPaused ? "Resume Session" : "Pause Session", action: () => setTimerPaused((p) => !p), disabled: !activeSession },
       { label: "End Session", action: endSession, disabled: !activeSession },
       { divider: true },
@@ -1470,7 +1538,7 @@ export default function App() {
 
         <main className="col-start-2 row-start-2 overflow-hidden grid grid-cols-[1fr_360px]">
           <div className="overflow-auto p-2">
-            {view === "work" && <WorkView project={selectedProject} columns={columns} tasks={projectTasks} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onMoveTask={moveTask} onAddTask={(statusId) => setModal({ type: "task", mode: "new", statusId })} onEditColumn={(id) => setModal({ type: "column", mode: "edit", id })} onAddColumn={() => setModal({ type: "column", mode: "new" })} onReorderColumns={reorderColumns} onUpdateProjectField={updateProjectField} onUpdateColumnField={updateColumnField} />}
+            {view === "work" && <WorkView project={selectedProject} columns={selectedProjectColumns} tasks={projectTasks} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} onMoveTask={moveTask} onAddTask={(statusId) => setModal({ type: "task", mode: "new", statusId })} onEditColumn={(id) => setModal({ type: "column", mode: "edit", id })} onAddColumn={() => setModal({ type: "column", mode: "new" })} onReorderColumns={reorderColumns} onUpdateProjectField={updateProjectField} onUpdateColumnField={updateColumnField} />}
             {view === "goals" && <GoalsView goals={goals} selectedGoalId={selectedGoalId} setSelectedGoalId={setSelectedGoalId} completion={goalCompletion} onSetGoalParent={setGoalParent} onAddGoal={() => setModal({ type: "goal", mode: "new" })} />}
             {view === "spikes" && <SpikesView goals={goals} projects={projects} tasks={tasks} sessions={allSessions} selectedSessionId={selectedSessionId} hoveredSessionId={hoveredSessionId} setHoveredSessionId={setHoveredSessionId} setSelectedSessionId={setSelectedSessionId} dateRange={dateRange} setDateRange={setDateRange} customRange={customRange} setCustomRange={setCustomRange} rangeWindow={rangeWindow} spikeMode={spikeMode} setSpikeMode={setSpikeMode} />}
             {view === "log" && <LogView sessions={allSessions} selectedSessionId={selectedSessionId} setSelectedSessionId={setSelectedSessionId} />}
@@ -1482,7 +1550,7 @@ export default function App() {
             goal={selectedGoal}
             session={selectedSession}
             completion={goalCompletion(selectedGoal?.id)}
-            columns={columns}
+            columns={task ? getColumnsForProject(task.projectId) : selectedProjectColumns}
             projects={projects}
             goals={goals}
             tasks={tasks}
@@ -1501,8 +1569,8 @@ export default function App() {
           {bottomPanels.map((panelId) => (
             <BottomPanelShell key={panelId} id={panelId} onReorder={reorderBottomPanel}>
               {panelId === "task" && <Scratchpad title={`Task Scratchpad · ${selectedTask?.title || "No task"}`} value={selectedTask?.scratchpad || ""} onChange={updateTaskScratch} placeholder="Select a task, then write task notes..." disabled={!selectedTask} />}
-              {panelId === "session" && <Scratchpad title={activeSession ? `Session Scratchpad · Active Run` : "Session Scratchpad · no active session"} value={sessionNotes} onChange={updateSessionScratch} placeholder={activeSession ? "Enter notes for this recorded run..." : "Start a session to write session notes..."} disabled={!activeSession} />}
-              {panelId === "tracker" && <SessionTracker sessions={allSessions} selectedSessionId={selectedSessionId} activeSession={activeSession} timerSeconds={timerSeconds} timerPaused={timerPaused} onStart={startSession} onPause={() => setTimerPaused((p) => !p)} onEnd={endSession} onSelect={setSelectedSessionId} onEdit={() => setModal({ type: "session", mode: "edit", id: selectedSessionId })} onDelete={() => deleteSession()} />}
+              {panelId === "session" && <Scratchpad title={activeSession ? `Session Scratchpad · Current Session` : "Session Scratchpad · No Current Session"} value={sessionNotes} onChange={updateSessionScratch} placeholder={activeSession ? "Enter notes for this recorded run..." : "Start a session to write session notes..."} disabled={!activeSession} />}
+              {panelId === "tracker" && <SessionTracker sessions={allSessions} selectedSessionId={selectedSessionId} activeSession={activeSession} timerSeconds={timerSeconds} timerPaused={timerPaused} onStart={startSession} onCreate={() => setModal({ type: "session", mode: "new" })} onPause={() => setTimerPaused((p) => !p)} onEnd={endSession} onSelect={setSelectedSessionId} onEdit={() => setModal({ type: "session", mode: "edit", id: selectedSessionId })} onDelete={() => deleteSession()} />}
             </BottomPanelShell>
           ))}
         </footer>
@@ -1510,9 +1578,9 @@ export default function App() {
 
       {modal?.type === "project" && <ProjectDialog mode={modal.mode} project={modal.mode === "edit" ? selectedProject : null} onSave={(p) => { saveProject(p); setModal(null); }} onClose={() => setModal(null)} />}
       {modal?.type === "goal" && <GoalDialog mode={modal.mode} goal={modal.mode === "edit" ? selectedGoal : null} parentId={modal.parentId} goals={goals} onSave={(g) => { saveGoal(g); setModal(null); }} onClose={() => setModal(null)} />}
-      {modal?.type === "task" && <TaskDialog mode={modal.mode} task={modal.mode === "edit" ? selectedTask : null} statusId={modal.statusId} projects={projects} goals={goals} columns={columns} selectedProjectId={selectedProjectId} selectedGoalId={selectedGoalId} onSave={(t) => { saveTask(t); setModal(null); }} onClose={() => setModal(null)} />}
-      {modal?.type === "column" && <ColumnDialog mode={modal.mode} column={modal.mode === "edit" ? columns.find((c) => c.id === modal.id) : null} onSave={(c) => { saveColumn(c); setModal(null); }} onDelete={(id) => { deleteColumn(id); setModal(null); }} onClose={() => setModal(null)} />}
-      {modal?.type === "session" && <SessionDialog session={allSessions.find((session) => session.id === selectedSessionId)} onSave={saveSession} onClose={() => setModal(null)} />}
+      {modal?.type === "task" && <TaskDialog mode={modal.mode} task={modal.mode === "edit" ? selectedTask : null} statusId={modal.statusId} projects={projects} goals={goals} columns={selectedProjectColumns} selectedProjectId={selectedProjectId} selectedGoalId={selectedGoalId} onSave={(t) => { saveTask(t); setModal(null); }} onClose={() => setModal(null)} />}
+      {modal?.type === "column" && <ColumnDialog mode={modal.mode} column={modal.mode === "edit" ? selectedProjectColumns.find((c) => c.id === modal.id) : null} onSave={(c) => { saveColumn(c); setModal(null); }} onDelete={(id) => { deleteColumn(id); setModal(null); }} onClose={() => setModal(null)} />}
+      {modal?.type === "session" && <SessionDialog mode={modal.mode} session={modal.mode === "edit" ? allSessions.find((session) => session.id === selectedSessionId) : null} tasks={tasks} projects={projects} goals={goals} getColumnsForProject={getColumnsForProject} onSave={saveSession} onRecordFromHere={recordFromSession} onClose={() => setModal(null)} />}
       {modal?.type === "help" && <HelpDialog topic={modal.topic} onClose={() => setModal(null)} />}
       {modal?.type === "about" && <AboutDialog onClose={() => setModal(null)} />}
       {modal?.type === "themes" && <ThemesDialog themeId={themeId} setThemeId={setThemeId} onClose={() => setModal(null)} />}
@@ -2060,7 +2128,7 @@ function BottomPanelShell({ id, children, onReorder }) {
           if (data.type === "bottom-panel") onReorder(data.id, id);
         } catch {}
       }}
-      className="min-w-0 cursor-grab active:cursor-grabbing"
+      className="min-w-0 h-full min-h-0 cursor-grab active:cursor-grabbing"
     >
       {children}
     </div>
@@ -2071,13 +2139,13 @@ function Scratchpad({ title, value, onChange, placeholder, disabled }) {
   return <div className={cx("flex flex-col min-w-0 h-full", disabled && "opacity-45")}><div className="text-xs mb-1 flex items-center justify-between"><span>{title}</span>{disabled ? <span className="text-[10px] text-zinc-500">locked</span> : <span className="text-[10px] text-zinc-600">drag panel to reorder</span>}</div><textarea disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="flex-1 resize-none bg-[#101010] border border-zinc-800 p-2 text-xs outline-none focus:border-emerald-700 placeholder:text-zinc-500 disabled:cursor-not-allowed disabled:bg-[#0d0d0d]" /></div>;
 }
 
-function SessionTracker({ sessions, selectedSessionId, activeSession, timerSeconds, timerPaused, onStart, onPause, onEnd, onSelect, onEdit, onDelete }) {
+function SessionTracker({ sessions, selectedSessionId, activeSession, timerSeconds, timerPaused, onStart, onCreate, onPause, onEnd, onSelect, onEdit, onDelete }) {
   return (
     <div className="flex flex-col min-w-0 h-full overflow-hidden">
       <div className="flex items-center justify-between text-xs mb-1"><span>Session Tracker</span><span>{activeSession ? formatElapsed(timerSeconds) : "00:00:00"}</span></div>
       <div className="grid grid-cols-3 gap-2 mb-2"><Button onClick={onStart} disabled={!!activeSession} icon={ICONS.play}>Start Session</Button><Button onClick={onPause} disabled={!activeSession} icon={ICONS.pause}>{timerPaused ? "Resume" : "Pause"}</Button><Button onClick={onEnd} disabled={!activeSession} icon={ICONS.stop}>End Session</Button></div>
-      <div className="border border-zinc-800 overflow-hidden shrink-0"><div className="grid grid-cols-4 h-6 items-center px-2 bg-[#1a1a1a] text-xs text-zinc-300 border-b border-zinc-800"><span>Time</span><span>Date</span><span>Progress</span><span>Done</span></div><div className="overflow-auto h-[140px]">{sessions.map((session) => <button key={session.id} onClick={() => onSelect(session.id)} className={cx("grid grid-cols-4 w-full text-left h-5 px-2 text-xs hover:bg-zinc-800", selectedSessionId === session.id && "bg-emerald-700 hover:bg-emerald-700 text-white")}><span>{session.startedAt}</span><span>{toDisplayDate(session.date)}</span><span>{session.spikes.length}</span><span className="text-emerald-300">{session.spikes.filter((s) => s.to === "complete").length}</span></button>)}</div></div>
-      <div className="grid grid-cols-3 gap-2 mt-2 shrink-0"><Button onClick={onStart} disabled={!!activeSession}>Create Session</Button><Button onClick={onEdit} disabled={!selectedSessionId}>Edit Session</Button><Button onClick={onDelete} disabled={!selectedSessionId}>Delete Session</Button></div>
+      <div className="border border-zinc-800 overflow-hidden flex-1 min-h-0"><div className="grid grid-cols-4 h-6 items-center px-2 bg-[#1a1a1a] text-xs text-zinc-300 border-b border-zinc-800"><span>Time</span><span>Date</span><span>Progress</span><span>Done</span></div><div className="overflow-auto h-[calc(100%-1.5rem)]">{sessions.map((session) => <button key={session.id} onClick={() => onSelect(session.id)} className={cx("grid grid-cols-4 w-full text-left h-5 px-2 text-xs hover:bg-zinc-800", selectedSessionId === session.id && "bg-emerald-700 hover:bg-emerald-700 text-white")}><span>{session.startedAt}</span><span>{toDisplayDate(session.date)}</span><span>{session.spikes.length}</span><span className="text-emerald-300">{session.spikes.filter((s) => s.to === "complete").length}</span></button>)}</div></div>
+      <div className="grid grid-cols-3 gap-2 mt-2 shrink-0"><Button onClick={onCreate}>Create Session</Button><Button onClick={onEdit} disabled={!selectedSessionId}>Edit Session</Button><Button onClick={onDelete} disabled={!selectedSessionId}>Delete Session</Button></div>
     </div>
   );
 }
@@ -2108,24 +2176,111 @@ function ColumnDialog({ mode, column, onSave, onDelete, onClose }) {
   return <Modal title={mode === "edit" ? "Edit Column" : "New Column"} onClose={onClose}><div className="space-y-3"><TextInput label="Column Title" value={draft.title} onChange={(title) => setDraft({ ...draft, title })} /><div className="grid grid-cols-2 gap-2"><TextInput label="Goal Contribution %" value={draft.contribution} onChange={(contribution) => setDraft({ ...draft, contribution: clamp(contribution) })} /><TextInput label="Spike Significance" value={draft.spikeWeight} onChange={(spikeWeight) => setDraft({ ...draft, spikeWeight: Math.max(0, Number(spikeWeight) || 0) })} /></div><div className="flex justify-between gap-2"><Button disabled={mode !== "edit"} onClick={() => onDelete(draft.id)}>Delete Column</Button><div className="flex gap-2"><Button onClick={onClose}>Cancel</Button><Button active onClick={() => onSave(draft)}>Save Column</Button></div></div></div></Modal>;
 }
 
-function SessionDialog({ session, onSave, onClose }) {
+function SessionDialog({ mode = "edit", session, tasks, projects, goals, getColumnsForProject, onSave, onRecordFromHere, onClose }) {
   const [draft, setDraft] = useState(session || { id: uid(), date: todayISO(), startedAt: "00:00:00", lengthSeconds: 0, note: "", spikes: [] });
+  const [spikeDraft, setSpikeDraft] = useState({
+    taskId: tasks?.[0]?.id || "",
+    fromStatusId: "backlog",
+    toStatusId: "complete",
+    createdAt: `${draft.date || todayISO()}T${draft.startedAt || "00:00:00"}`,
+  });
+
+  const spikeTask = tasks.find((task) => task.id === spikeDraft.taskId);
+  const spikeColumns = getColumnsForProject?.(spikeTask?.projectId) || [];
+
+  useEffect(() => {
+    const task = tasks.find((item) => item.id === spikeDraft.taskId);
+    const availableColumns = getColumnsForProject?.(task?.projectId) || [];
+    if (!availableColumns.length) return;
+    setSpikeDraft((current) => ({
+      ...current,
+      fromStatusId: availableColumns.some((column) => column.id === current.fromStatusId) ? current.fromStatusId : availableColumns[0].id,
+      toStatusId: availableColumns.some((column) => column.id === current.toStatusId) ? current.toStatusId : (availableColumns.find((column) => column.id === "complete")?.id || availableColumns[0].id),
+    }));
+  }, [spikeDraft.taskId]);
+
+  const addSpike = () => {
+    const task = tasks.find((item) => item.id === spikeDraft.taskId);
+    if (!task) return;
+    const projectColumns = getColumnsForProject?.(task.projectId) || [];
+    const fromColumn = projectColumns.find((column) => column.id === spikeDraft.fromStatusId);
+    const toColumn = projectColumns.find((column) => column.id === spikeDraft.toStatusId);
+    const createdAt = spikeDraft.createdAt || new Date().toISOString();
+    const newSpike = {
+      id: uid(),
+      taskId: task.id,
+      projectId: task.projectId,
+      goalIds: task.goalIds || [],
+      createdAt,
+      date: createdAt.slice(0, 10),
+      weight: toColumn?.spikeWeight || 1,
+      fromStatusId: spikeDraft.fromStatusId,
+      fromStatusTitle: fromColumn?.title || spikeDraft.fromStatusId,
+      toStatusId: spikeDraft.toStatusId,
+      toStatusTitle: toColumn?.title || spikeDraft.toStatusId,
+      from: spikeDraft.fromStatusId,
+      to: spikeDraft.toStatusId,
+    };
+    setDraft((current) => ({ ...current, spikes: [...(current.spikes || []), newSpike] }));
+  };
+
+  const removeSpike = (id) => setDraft((current) => ({ ...current, spikes: (current.spikes || []).filter((spike) => spike.id !== id) }));
+
   return (
-    <Modal title="Edit Session" onClose={onClose} width="max-w-2xl">
+    <Modal title={mode === "new" ? "Create Session" : "Edit Session"} onClose={onClose} width="max-w-4xl">
       <div className="space-y-3">
         <div className="grid grid-cols-3 gap-2">
           <TextInput label="Date" value={draft.date} onChange={(date) => setDraft({ ...draft, date })} />
           <TextInput label="Started At" value={draft.startedAt} onChange={(startedAt) => setDraft({ ...draft, startedAt })} />
           <TextInput label="Length Seconds" value={draft.lengthSeconds} onChange={(lengthSeconds) => setDraft({ ...draft, lengthSeconds: Math.max(0, Number(lengthSeconds) || 0) })} />
         </div>
-        <TextInput textarea label="Session Scratchpad / Notes" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
-        <div className="text-xs text-zinc-400">Recorded spikes: {draft.spikes?.length || 0}</div>
-        <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button active onClick={() => onSave(draft)}>Save Session</Button></div>
+        <TextInput textarea label="Session Notes" value={draft.note} onChange={(note) => setDraft({ ...draft, note })} />
+
+        <div className="border border-zinc-800 bg-zinc-950 p-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs text-zinc-100">Manual Spikes</div>
+              <div className="text-[10px] text-zinc-500">Add a timestamped status movement to this session.</div>
+            </div>
+            <Button onClick={addSpike} disabled={!spikeTask}>Add Spike</Button>
+          </div>
+          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-2">
+            <SelectInput label="Task" value={spikeDraft.taskId} onChange={(taskId) => setSpikeDraft({ ...spikeDraft, taskId })}>
+              {tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
+            </SelectInput>
+            <SelectInput label="From" value={spikeDraft.fromStatusId} onChange={(fromStatusId) => setSpikeDraft({ ...spikeDraft, fromStatusId })}>
+              {spikeColumns.map((column) => <option key={column.id} value={column.id}>{column.title}</option>)}
+            </SelectInput>
+            <SelectInput label="To" value={spikeDraft.toStatusId} onChange={(toStatusId) => setSpikeDraft({ ...spikeDraft, toStatusId })}>
+              {spikeColumns.map((column) => <option key={column.id} value={column.id}>{column.title}</option>)}
+            </SelectInput>
+            <TextInput label="Timestamp" value={spikeDraft.createdAt} onChange={(createdAt) => setSpikeDraft({ ...spikeDraft, createdAt })} />
+          </div>
+          <div className="max-h-40 overflow-auto space-y-1">
+            {(draft.spikes || []).map((spike) => {
+              const task = tasks.find((item) => item.id === spike.taskId);
+              const project = projects.find((item) => item.id === spike.projectId);
+              return (
+                <div key={spike.id} className="grid grid-cols-[1fr_auto] gap-2 border border-zinc-800 bg-[#101010] p-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="truncate text-zinc-100">{task?.title || "Task"}</div>
+                    <div className="text-zinc-400 truncate">{project?.title || "Project"} · {spike.fromStatusTitle || spike.from} → {spike.toStatusTitle || spike.to} · {getSpikeTimestamp(spike)}</div>
+                  </div>
+                  <button onClick={() => removeSpike(spike.id)} className="text-zinc-400 hover:text-emerald-300">Remove</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex justify-between gap-2">
+          <Button onClick={() => onRecordFromHere(draft)} disabled={!!session && session.id !== draft.id}>Record From Here</Button>
+          <div className="flex justify-end gap-2"><Button onClick={onClose}>Cancel</Button><Button active onClick={() => onSave(draft)}>Save Session</Button></div>
+        </div>
       </div>
     </Modal>
   );
 }
-
 
 function ThemesDialog({ themeId, setThemeId, onClose }) {
   return (
