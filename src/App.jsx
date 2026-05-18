@@ -1550,7 +1550,7 @@ export default function App() {
             goal={selectedGoal}
             session={selectedSession}
             completion={goalCompletion(selectedGoal?.id)}
-            columns={task ? getColumnsForProject(task.projectId) : selectedProjectColumns}
+            columns={selectedTask ? getColumnsForProject(selectedTask.projectId) : selectedProjectColumns}
             projects={projects}
             goals={goals}
             tasks={tasks}
